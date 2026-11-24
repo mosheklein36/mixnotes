@@ -1,0 +1,311 @@
+PROJECT NAME
+MixNotes
+
+VISION
+A tool for music producers that automatically uploads exports from FL Studio to a mobile player where they can listen in different environments and leave timestamped notes. Notes sync back to desktop for review.
+
+GOAL OF V1
+Solve one workflow:
+
+Export Track
+→ Listen on Phone
+→ Add Notes
+→ View Notes on Desktop
+
+DO NOT ADD AI FEATURES.
+DO NOT ADD COLLABORATION.
+DO NOT ADD WAVEFORM ANALYSIS.
+KEEP IT SIMPLE.
+
+TECH STACK
+
+Desktop:
+- Tauri
+- React
+
+Backend:
+- Supabase (Auth, Postgres, Realtime)
+- Supabase Storage (private bucket)
+
+Mobile:
+- Responsive Web App (PWA)
+- React
+
+Repo:
+- Single repo (monorepo)
+- Shared package: Supabase client, types, note list component
+
+BUILD ORDER
+
+Phase 0 - Risk Spikes
+Phase 1 - Database
+Phase 2 - Mobile Player       (upload test files manually via Supabase dashboard)
+Phase 3 - Timestamp Notes
+Phase 4 - Desktop Watcher
+Phase 5 - Project Handling
+Phase 6 - Desktop Note Review
+
+Loading states and error handling are built into EVERY phase, not left for the end.
+
+--------------------------------------------------
+
+PHASE 0 - RISK SPIKES (half a day)
+
+Verify before building anything else:
+
+1. iPhone PWA (added to home screen) keeps playing audio
+   with the screen locked. Lock screen controls work.
+
+2. A folder watcher on Windows reliably detects FL Studio exports,
+   including when FL overwrites an existing file with the same name.
+
+If either fails, revise the plan before continuing.
+
+--------------------------------------------------
+
+PHASE 1 - DATABASE
+
+Authentication:
+- Supabase Auth, email + password (or 6-digit email OTP code)
+- No magic links (deep linking back into Tauri is awkward)
+- Users come from Supabase auth.users. No separate Users table.
+
+Tables:
+
+Projects
+- id
+- user_id        (references auth.users)
+- name
+- created_at
+- UNIQUE (user_id, name)
+
+Versions
+- id
+- user_id
+- project_id
+- storage_path   (path in bucket, NOT a public URL)
+- filename
+- file_hash      (used to skip duplicate uploads)
+- duration_seconds
+- created_at
+
+Notes
+- id
+- user_id
+- version_id
+- timestamp_seconds
+- text
+- done           (boolean, default false)
+- created_at
+- updated_at
+
+Security:
+- Row Level Security enabled on ALL tables
+- Policy: user can only read/write rows where user_id = auth.uid()
+- Storage bucket is private; files stored under {user_id}/...
+- Storage policy: user can only access their own folder
+- Mobile plays audio via short-lived signed URLs
+
+--------------------------------------------------
+
+PHASE 2 - MOBILE WEB APP (PLAYER)
+
+Installable PWA (manifest + icon, "Add to Home Screen").
+
+Home Screen:
+
+Projects (sorted by most recent upload)
+
+- Summer Anthem
+- Future Bass Idea
+- Remix Draft
+
+Click project:
+
+Opens the LATEST version's player directly.
+Older versions available via a "Versions" link on the player screen.
+
+Player Features:
+
+- Play
+- Pause
+- Seek Bar
+- Current Time
+- Total Length
+- Lock screen / background playback controls (Media Session API)
+
+--------------------------------------------------
+
+PHASE 3 - TIMESTAMP NOTES
+
+THIS IS THE MOST IMPORTANT FEATURE.
+
+Player Screen:
+
+--------------------------------
+
+Project Name
+Version (upload date/time)
+
+Play Button
+
+Progress Bar
+
+[ ADD NOTE ]
+
+Notes:
+[1:12] Vocal too quiet
+[2:14] Kick too loud in chorus
+
+--------------------------------
+
+When user presses:
+
+ADD NOTE
+
+Capture the current playback position AT THE MOMENT OF THE TAP
+(not when Save is pressed).
+
+Optionally pause playback while the modal is open
+(user setting, default ON).
+
+Show modal:
+
+Add Note @ 2:14
+
+[ text input ]
+
+Save / Cancel
+
+Store:
+
+Timestamp:
+2:14
+
+Note:
+Kick too loud in chorus
+
+Notes list (on player screen):
+- Sorted by timestamp
+- Tap a timestamp → seek audio to that position
+- Edit and delete a note
+
+--------------------------------------------------
+
+PHASE 4 - DESKTOP APPLICATION (WATCHER)
+
+Screen:
+
+MixNotes Desktop
+
+Watched Folder:
+[ Select Folder ]
+
+Status:
+Connected
+Watching Folder
+
+Recent Uploads:
+- filename
+- upload time
+- status (uploading / done / failed - retry)
+
+Requirements:
+
+1. User logs in (email + password / OTP).
+
+2. User selects export folder.
+
+3. App stores folder path.
+
+4. Files already in the folder when it is first selected are IGNORED.
+
+5. App runs in the system tray and launches on system startup,
+   so watching continues when the window is closed.
+
+6. When a new or overwritten audio file appears:
+
+- accepted formats: .mp3 (and .wav, subject to size limit)
+- ignore temp / partial files
+- wait until file size is unchanged for ~2 seconds (write complete)
+- compute file hash; skip if already uploaded
+- upload to Supabase Storage
+- create Project if needed (upsert on user_id + name)
+- create Version record
+
+7. Show upload success/failure.
+
+8. Failed uploads are queued and retried automatically when
+   the connection returns. Manual "Retry" button as well.
+
+Note: Supabase free tier has a 50 MB per-file limit.
+Recommend exporting MP3 from FL Studio. Reject files over the limit
+with a clear error.
+
+--------------------------------------------------
+
+PHASE 5 - PROJECT HANDLING
+
+For MVP:
+
+Project Name = file name without extension,
+with common version suffixes stripped.
+
+Strip (case-insensitive, at end of name):
+- v1, v2, v3 ... (" v2", "_v2", "-v2")
+- final, master, mix, mixdown
+- (1), (2) ...
+
+Examples:
+
+Summer Anthem.mp3          → Project: Summer Anthem
+Summer Anthem v2.mp3       → Project: Summer Anthem
+Summer Anthem_master.mp3   → Project: Summer Anthem
+
+Each upload creates a new Version under the Project.
+Versions are identified by upload date/time.
+
+No version numbering yet.
+
+Desktop: user can move a version to a different project
+(fixes any wrong automatic grouping).
+
+--------------------------------------------------
+
+PHASE 6 - DESKTOP NOTE REVIEW
+
+Desktop App
+
+Project View:
+
+Summer Anthem
+
+Latest version (expanded):
+
+[ ] [2:14] Kick too loud in chorus
+[ ] [3:02] Transition feels weak
+[x] [3:41] Bass disappears in car
+
+Older versions (collapsed, expandable)
+
+Requirements:
+- Notes grouped by version, latest version expanded by default
+- Sorted by timestamp
+- "Done" checkbox per note (fix list while mixing)
+- Live updates via Supabase Realtime when notes are added on phone
+
+--------------------------------------------------
+
+SUCCESS CRITERIA
+
+A user can:
+
+1. Export MP3 from FL Studio
+2. Open phone
+3. Listen immediately (export → playable on phone in under 60 seconds)
+4. Add timestamped notes
+5. Open desktop app
+6. Read all notes (appear live, no manual refresh)
+7. Check off notes as they are fixed
+
+V1 COMPLETE
