@@ -1,0 +1,6 @@
+{
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter @mixnotes/mobile build",
+  "outputDirectory": "apps/mobile/dist",
+  "rewrites": [{ "source": "/((?!assets/|.*\\.).*)", "destination": "/index.html" }]
+}
