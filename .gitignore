@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.local
+*.log
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen
+supabase/.branches
+supabase/.temp
+.DS_Store
