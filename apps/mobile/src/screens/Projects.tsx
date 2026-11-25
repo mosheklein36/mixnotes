@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { errorMessage, formatUploadDate, listProjects, type Project } from "@mixnotes/shared";
+import { errorMessage, formatUploadDate, listProjects, subscribeToVersions, type Project } from "@mixnotes/shared";
 import { sb } from "../supabase";
 
 export function Projects() {
@@ -20,7 +20,17 @@ export function Projects() {
     load();
     const onVisible = () => document.visibilityState === "visible" && load();
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    let channel: ReturnType<typeof subscribeToVersions> | null = null;
+    let cancelled = false;
+    sb.auth.getSession().then(({ data }) => {
+      const userId = data.session?.user.id;
+      if (!cancelled && userId) channel = subscribeToVersions(sb, userId, load);
+    });
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      if (channel) sb.removeChannel(channel);
+    };
   }, [load]);
 
   return (
