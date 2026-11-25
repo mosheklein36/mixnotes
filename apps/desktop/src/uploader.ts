@@ -67,6 +67,8 @@ export function useUploader(userId: string | null) {
   const [online, setOnline] = useState(navigator.onLine);
   const itemsRef = useRef(items);
   const busyRef = useRef(false);
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
 
   useEffect(() => {
     itemsRef.current = items;
@@ -78,7 +80,7 @@ export function useUploader(userId: string | null) {
   }, []);
 
   const processQueue = useCallback(async () => {
-    if (busyRef.current || !userId) return;
+    if (busyRef.current || !userIdRef.current) return;
     busyRef.current = true;
     try {
       for (;;) {
@@ -108,8 +110,11 @@ export function useUploader(userId: string | null) {
       }
     } finally {
       busyRef.current = false;
+      if (itemsRef.current.some((i) => i.status === "pending")) setTimeout(() => void processQueueRef.current(), 0);
     }
-  }, [patch, userId]);
+  }, [patch]);
+  const processQueueRef = useRef(processQueue);
+  processQueueRef.current = processQueue;
 
   const retry = useCallback(
     (hash?: string) => {
@@ -120,9 +125,8 @@ export function useUploader(userId: string | null) {
         itemsRef.current = next;
         return next;
       });
-      setTimeout(processQueue, 0);
     },
-    [processQueue],
+    [],
   );
 
   // Incoming files from the Rust watcher.
@@ -145,7 +149,6 @@ export function useUploader(userId: string | null) {
         itemsRef.current = next;
         return next;
       });
-      setTimeout(processQueue, 0);
     });
     const unlistenErr = listen<string>("watch-error", ({ payload }) =>
       setWatch((w) => (w.kind === "idle" ? w : { kind: "error", folder: w.folder, message: payload })),
@@ -154,7 +157,7 @@ export function useUploader(userId: string | null) {
       unlisten.then((f) => f());
       unlistenErr.then((f) => f());
     };
-  }, [processQueue]);
+  }, []);
 
   // Start/stop the watcher with the selected folder.
   useEffect(() => {
@@ -191,9 +194,10 @@ export function useUploader(userId: string | null) {
     };
   }, [retry]);
 
+  // Drain the queue after every committed change, so new items never depend on render timing.
   useEffect(() => {
-    if (userId) processQueue();
-  }, [userId, processQueue]);
+    if (userId && items.some((i) => i.status === "pending")) void processQueue();
+  }, [items, userId, processQueue]);
 
   const setFolder = useCallback((path: string) => {
     // Files already in a newly selected folder are ignored.
