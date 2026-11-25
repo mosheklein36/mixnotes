@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      disable: process.env.CAPACITOR === "1",
       registerType: "autoUpdate",
       includeAssets: ["icon.svg"],
       manifest: {

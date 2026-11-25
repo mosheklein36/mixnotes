@@ -1,10 +1,17 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { App } from "./App";
 import "./styles.css";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+const root = ReactDOM.createRoot(document.getElementById("root")!);
+
+import("./App")
+  .then(({ App }) =>
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    ),
+  )
+  .catch((e: unknown) =>
+    root.render(<div className="center muted">MixNotes failed to start: {e instanceof Error ? e.message : String(e)}</div>),
+  );

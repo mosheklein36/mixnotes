@@ -13,9 +13,6 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    env:
-      VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-      VITE_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
